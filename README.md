@@ -27,7 +27,7 @@
 Клонируйте репозиторий:
 
 ```bash
-git clone <ссылка-на-репозиторий>
+git clone git@github.com:Zh-zh-k/bs4_parser_pep.git
 cd bs4_parser_pep
 ```
 
