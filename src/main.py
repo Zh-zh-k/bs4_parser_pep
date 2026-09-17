@@ -175,6 +175,56 @@ def download(session):
     )
 
 
+def get_pep_status(session, pep_url):
+    response = get_response(session, pep_url)
+    if response is None:
+        return None
+
+    soup = BeautifulSoup(response.text, 'lxml')
+
+    for dt_tag in soup.find_all('dt'):
+        tag_text = dt_tag.get_text(strip=True).rstrip(':')
+
+        if tag_text == 'Status':
+            status_value = dt_tag.find_next_sibling('dd')
+
+            if status_value is not None:
+                return next(status_value.stripped_strings)
+
+    logging.error(
+        f'Не найден статус PEP: {pep_url}'
+    )
+    return None
+
+
+def get_pep_data(row, pep_index_url):
+    columns = row.find_all('td')
+
+    if len(columns) < 2:
+        return None
+
+    first_column_tag = columns[0]
+    number_tag = columns[1]
+
+    link_tag = number_tag.find('a')
+    if link_tag is None:
+        return None
+
+    pep_number = link_tag.text.strip()
+
+    if pep_number == '0':
+        return None
+
+    preview_status = first_column_tag.text.strip()[1:]
+
+    pep_url = urljoin(
+        pep_index_url,
+        link_tag['href']
+    )
+
+    return pep_url, preview_status
+
+
 def pep(session):
     pep_index_url = urljoin(PEP_URL, 'numerical/')
 
@@ -190,60 +240,17 @@ def pep(session):
     status_counter = Counter()
 
     for row in tqdm(rows):
-        columns = row.find_all('td')
+        pep_data = get_pep_data(row, pep_index_url)
 
-        if len(columns) < 2:
+        if pep_data is None:
             continue
 
-        first_column_tag = columns[0]
-        number_tag = columns[1]
+        pep_url, preview_status = pep_data
 
-        link_tag = number_tag.find('a')
-        if link_tag is None:
+        status = get_pep_status(session, pep_url)
+
+        if status is None:
             continue
-
-        pep_number = link_tag.text.strip()
-
-        if pep_number == '0':
-            continue
-
-        preview_status = first_column_tag.text.strip()[1:]
-
-        pep_url = urljoin(
-            pep_index_url,
-            link_tag['href']
-        )
-
-        response = get_response(session, pep_url)
-        if response is None:
-            continue
-
-        pep_soup = BeautifulSoup(response.text, 'lxml')
-
-        status_tag = None
-
-        for dt_tag in pep_soup.find_all('dt'):
-            tag_text = dt_tag.get_text(strip=True).rstrip(':')
-
-            if tag_text == 'Status':
-                status_tag = dt_tag
-                break
-
-        if status_tag is None:
-            logging.error(
-                f'Не найден статус PEP: {pep_url}'
-            )
-            continue
-
-        status_value = status_tag.find_next_sibling('dd')
-
-        if status_value is None:
-            logging.error(
-                f'Не найдено значение статуса PEP: {pep_url}'
-            )
-            continue
-
-        status = next(status_value.stripped_strings)
 
         expected_statuses = EXPECTED_STATUS.get(
             preview_status,
